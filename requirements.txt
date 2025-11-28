@@ -8,3 +8,4 @@ yfinance
 matplotlib
 plotly
 scikit-learn
+pandas_datareader
