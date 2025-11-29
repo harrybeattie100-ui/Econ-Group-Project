@@ -9,3 +9,4 @@ matplotlib
 plotly
 scikit-learn
 pandas_datareader
+pytest
