@@ -91,8 +91,15 @@ def main() -> None:
             results = cached_results["results"]
             models_ready = True
 
-    home_tab, data_tab, model_tab, forecast_tab, eval_tab = st.tabs(
-        ["Home", "Data explorer", "Model estimation", "Forecasts and diagnostics", "Forecast evaluation"]
+    home_tab, data_tab, model_tab, forecast_tab, eval_tab, sim_tab = st.tabs(
+        [
+            "Home",
+            "Data explorer",
+            "Model estimation",
+            "Forecasts and diagnostics",
+            "Forecast evaluation",
+            "Crisis simulation",
+        ]
     )
 
     with home_tab:
@@ -206,6 +213,106 @@ def main() -> None:
                     )
             except Exception as exc:  # pragma: no cover - defensive
                 st.error(f"Evaluation failed: {exc}")
+
+    with sim_tab:
+        st.subheader("Crisis simulation")
+        st.write(
+            "Simulate simple shock scenarios to VIX or credit spreads and view their impact on the "
+            "FSI forecast path. Shocks are applied as constant shifts using OLS coefficients."
+        )
+
+        scenario_options = [
+            "None",
+            "VIX shock plus 25 percent",
+            "VIX shock plus 50 percent",
+            "Credit spread shock plus 50bp",
+            "Credit spread shock plus 100bp",
+        ]
+        scenario_choice = st.selectbox("Shock scenario", options=scenario_options, index=0)
+        sim_horizon = st.slider(
+            "Scenario horizon (days)", min_value=5, max_value=60, value=horizon, step=5
+        )
+        if st.button("Run simulation"):
+            if insufficient_data:
+                st.info("Select a longer sample to run simulations (need at least 100 daily observations).")
+            else:
+                try:
+                    sim_train = train_df
+                    ols_params = None
+                    if models_ready and results is not None:
+                        ols_params = results["ols"]["params"]
+                    if ols_params is None:
+                        ols_params = run_ols(sim_train)["params"]
+
+                    vix_beta = float(ols_params.get("VIX", 0.0))
+                    spread_beta = float(ols_params.get("Spread", 0.0))
+                    latest_obs = sim_train.iloc[-1]
+                    current_vix = float(latest_obs["VIX"])
+                    current_spread = float(latest_obs["Spread"])
+
+                    shock_shift = 0.0
+                    shock_desc = "No shock applied."
+
+                    if scenario_choice == "VIX shock plus 25 percent":
+                        shock_size = 0.25 * current_vix
+                        shock_shift = vix_beta * shock_size
+                        shock_desc = (
+                            f"VIX increased by 25% of current level ({shock_size:.2f}); "
+                            f"FSI shift = beta_VIX ({vix_beta:.4f}) * shock."
+                        )
+                    elif scenario_choice == "VIX shock plus 50 percent":
+                        shock_size = 0.50 * current_vix
+                        shock_shift = vix_beta * shock_size
+                        shock_desc = (
+                            f"VIX increased by 50% of current level ({shock_size:.2f}); "
+                            f"FSI shift = beta_VIX ({vix_beta:.4f}) * shock."
+                        )
+                    elif scenario_choice == "Credit spread shock plus 50bp":
+                        shock_size = 0.50  # 50 basis points expressed in spread units
+                        shock_shift = spread_beta * shock_size
+                        shock_desc = (
+                            f"Credit spread increased by 50bp ({shock_size:.2f}); "
+                            f"FSI shift = beta_Spread ({spread_beta:.4f}) * shock."
+                        )
+                    elif scenario_choice == "Credit spread shock plus 100bp":
+                        shock_size = 1.00  # 100 basis points expressed in spread units
+                        shock_shift = spread_beta * shock_size
+                        shock_desc = (
+                            f"Credit spread increased by 100bp ({shock_size:.2f}); "
+                            f"FSI shift = beta_Spread ({spread_beta:.4f}) * shock."
+                        )
+
+                    arima_order = None
+                    if models_ready and results is not None:
+                        arima_order = results["arima"]["order"]
+                    if arima_order is None:
+                        arima_order = select_arima(sim_train["FSI"])
+
+                    arima_res = run_arima(sim_train["FSI"], arima_order)
+                    forecast_df = arima_res["forecast"](sim_horizon)
+                    baseline_mean = forecast_df["mean"].copy()
+                    if not isinstance(baseline_mean.index, pd.DatetimeIndex):
+                        future_index = pd.date_range(
+                            sim_train.index.max() + pd.Timedelta(days=1), periods=sim_horizon, freq="D"
+                        )
+                        baseline_mean.index = future_index
+
+                    shocked_mean = baseline_mean + shock_shift
+
+                    history = sim_train["FSI"].iloc[-200:].rename("Historical FSI")
+                    future_paths = pd.DataFrame(
+                        {"Baseline forecast": baseline_mean, "Shock scenario": shocked_mean}
+                    )
+                    combined_paths = pd.concat([history, future_paths], axis=1)
+                    st.line_chart(combined_paths)
+
+                    st.write(shock_desc)
+                    st.write(
+                        f"Simulation horizon: {sim_horizon} days. Training data through {train_end} "
+                        f"| Current VIX {current_vix:.2f}, Spread {current_spread:.2f}."
+                    )
+                except Exception as exc:  # pragma: no cover - defensive
+                    st.error(f"Simulation failed: {exc}")
 
 
 if __name__ == "__main__":
