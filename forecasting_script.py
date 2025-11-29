@@ -3,6 +3,8 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import matplotlib
+import matplotlib.pyplot as plt
 
 sys.path.append(os.path.abspath("."))
 
@@ -11,10 +13,93 @@ from src.models.arima import run_arima, select_arima
 from src.models.garch import run_garch
 from src.models.ols import diagnostics_ols, run_ols
 
+matplotlib.use("Agg")
+
+
+"""
+Standalone pipeline for the FIN41660 Crisis Forecaster project.
+
+Runs OLS, ARIMA, and GARCH on the FSI, writes forecasts/metrics, and saves
+figures for the written report.
+"""
 
 REPORT_DIR = Path("report")
 DATA_PATH = Path("data") / "fsi.csv"
 FORECAST_HORIZON = 30
+
+
+def _ensure_datetime_index(series: pd.Series, start: pd.Timestamp, periods: int) -> pd.Series:
+    """Guarantee a datetime index for forecast series when statsmodels returns an integer index."""
+    if isinstance(series.index, pd.DatetimeIndex):
+        return series
+    future_index = pd.date_range(start + pd.Timedelta(days=1), periods=periods, freq="D")
+    series.index = future_index
+    return series
+
+
+def save_figures(df: pd.DataFrame, arima_forecast: pd.DataFrame | None, garch_forecast: pd.DataFrame | None, garch_model) -> None:
+    """Persist basic figures supporting the project report."""
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+
+    try:
+        fig, ax = plt.subplots(figsize=(8, 4))
+        df["FSI"].plot(ax=ax, label="FSI")
+        ax.set_title("Financial Stress Index (full history)")
+        ax.set_ylabel("Index level")
+        ax.legend()
+        fig.tight_layout()
+        fig.savefig(REPORT_DIR / "fsi_series.png")
+        plt.close(fig)
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"FSI figure failed: {exc}")
+
+    try:
+        if arima_forecast is not None:
+            history = df["FSI"].iloc[-200:]
+            forecast_mean = arima_forecast["mean"].copy()
+            forecast_mean = _ensure_datetime_index(forecast_mean, df.index.max(), len(forecast_mean))
+            arima_forecast = arima_forecast.copy()
+            arima_forecast.index = forecast_mean.index
+
+            fig, ax = plt.subplots(figsize=(8, 4))
+            history.plot(ax=ax, label="Historical FSI")
+            forecast_mean.plot(ax=ax, label="ARIMA forecast")
+            ax.fill_between(
+                arima_forecast.index,
+                arima_forecast["mean_ci_lower"],
+                arima_forecast["mean_ci_upper"],
+                alpha=0.2,
+                label="95% CI",
+            )
+            ax.set_title("ARIMA forecast with 95% confidence interval")
+            ax.legend()
+            fig.tight_layout()
+            fig.savefig(REPORT_DIR / "arima_forecast.png")
+            plt.close(fig)
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"ARIMA figure failed: {exc}")
+
+    try:
+        if garch_forecast is not None and garch_model is not None:
+            cond_vol = pd.Series(garch_model.conditional_volatility, index=df.index, name="Cond vol")
+            forecast_vol = garch_forecast["volatility"].copy()
+            if not isinstance(forecast_vol.index, pd.DatetimeIndex):
+                future_index = pd.date_range(
+                    df.index.max() + pd.Timedelta(days=1), periods=len(forecast_vol), freq="D"
+                )
+                forecast_vol.index = future_index
+
+            fig, ax = plt.subplots(figsize=(8, 4))
+            cond_vol.iloc[-250:].plot(ax=ax, label="In-sample volatility")
+            forecast_vol.plot(ax=ax, label="Forecast volatility")
+            ax.set_title("GARCH conditional volatility and forecast")
+            ax.set_ylabel("Volatility")
+            ax.legend()
+            fig.tight_layout()
+            fig.savefig(REPORT_DIR / "garch_vol_forecast.png")
+            plt.close(fig)
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"GARCH figure failed: {exc}")
 
 
 def main() -> None:
@@ -23,6 +108,9 @@ def main() -> None:
 
     df = pd.read_csv(DATA_PATH, parse_dates=["Date"], index_col="Date").dropna()
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    arima_forecast: pd.DataFrame | None = None
+    garch_forecast: pd.DataFrame | None = None
+    garch_model = None
 
     # OLS
     ols_summary_path = REPORT_DIR / "ols_summary.txt"
@@ -73,10 +161,13 @@ def main() -> None:
     try:
         garch_res = run_garch(df["FSI"])
         garch_forecast = garch_res["forecast"](FORECAST_HORIZON)
+        garch_model = garch_res["model"]
         garch_forecast.to_csv(garch_forecast_path)
         print(f"GARCH volatility forecast saved to {garch_forecast_path}")
     except Exception as exc:  # pragma: no cover - defensive
         print(f"GARCH estimation failed: {exc}")
+
+    save_figures(df, arima_forecast, garch_forecast, garch_model)
 
 
 if __name__ == "__main__":
