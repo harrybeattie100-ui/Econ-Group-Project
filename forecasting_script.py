@@ -2,9 +2,10 @@ import os
 import sys
 from pathlib import Path
 
-import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
+import pandas as pd
+from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 
 sys.path.append(os.path.abspath("."))
 
@@ -37,7 +38,13 @@ def _ensure_datetime_index(series: pd.Series, start: pd.Timestamp, periods: int)
     return series
 
 
-def save_figures(df: pd.DataFrame, arima_forecast: pd.DataFrame | None, garch_forecast: pd.DataFrame | None, garch_model) -> None:
+def save_figures(
+    df: pd.DataFrame,
+    arima_forecast: pd.DataFrame | None,
+    garch_forecast: pd.DataFrame | None,
+    garch_model,
+    residuals: pd.Series | None = None,
+) -> None:
     """Persist basic figures supporting the project report."""
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -101,6 +108,53 @@ def save_figures(df: pd.DataFrame, arima_forecast: pd.DataFrame | None, garch_fo
     except Exception as exc:  # pragma: no cover - defensive
         print(f"GARCH figure failed: {exc}")
 
+    try:
+        if residuals is not None and not residuals.empty:
+            clean_resid = residuals.dropna()
+            fig, axes = plt.subplots(1, 2, figsize=(9, 4))
+            plot_acf(clean_resid, lags=24, ax=axes[0])
+            axes[0].set_title("OLS residual ACF")
+            plot_pacf(clean_resid, lags=24, ax=axes[1], method="ywm")
+            axes[1].set_title("OLS residual PACF")
+            fig.tight_layout()
+            fig.savefig(REPORT_DIR / "ols_residual_acf_pacf.png")
+            plt.close(fig)
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"OLS residual ACF/PACF figure failed: {exc}")
+
+    try:
+        # Decompose the FSI into equal-weighted z-score contributions for the three components.
+        zscores = df[["VIX", "Spread", "CDS"]].apply(lambda s: (s - s.mean()) / s.std())
+        contrib_df = pd.DataFrame(
+            {
+                "VIX_contrib": zscores["VIX"] / 3,
+                "Spread_contrib": zscores["Spread"] / 3,
+                "CDS_contrib": zscores["CDS"] / 3,
+                "FSI": df["FSI"],
+            }
+        )
+        # Focus on a recent window for readability.
+        plot_df = contrib_df.loc[contrib_df.index >= "2020-01-01"]
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.stackplot(
+            plot_df.index,
+            plot_df["VIX_contrib"],
+            plot_df["Spread_contrib"],
+            plot_df["CDS_contrib"],
+            labels=["VIX contribution", "Credit spread contribution", "Bank risk contribution"],
+            alpha=0.85,
+        )
+        ax.plot(plot_df.index, plot_df["FSI"], linewidth=2, label="FSI (sum of contributions)")
+        ax.set_title("Decomposition of Financial Stress Index into Component Contributions")
+        ax.set_ylabel("Contribution to FSI")
+        ax.legend(loc="upper left", ncol=2)
+        fig.tight_layout()
+        fig.savefig(REPORT_DIR / "fsi_decomposition.png", dpi=300)
+        plt.close(fig)
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"FSI decomposition figure failed: {exc}")
+
 
 def main() -> None:
     if not DATA_PATH.exists():
@@ -111,11 +165,13 @@ def main() -> None:
     arima_forecast: pd.DataFrame | None = None
     garch_forecast: pd.DataFrame | None = None
     garch_model = None
+    ols_residuals: pd.Series | None = None
 
     # OLS
     ols_summary_path = REPORT_DIR / "ols_summary.txt"
     try:
         ols_res = run_ols(df)
+        ols_residuals = ols_res["residuals"]
         diag = diagnostics_ols(ols_res["residuals"])
         with open(ols_summary_path, "w") as fh:
             fh.write(ols_res["model"].summary().as_text())
@@ -167,7 +223,7 @@ def main() -> None:
     except Exception as exc:  # pragma: no cover - defensive
         print(f"GARCH estimation failed: {exc}")
 
-    save_figures(df, arima_forecast, garch_forecast, garch_model)
+    save_figures(df, arima_forecast, garch_forecast, garch_model, residuals=ols_residuals)
 
 
 if __name__ == "__main__":
