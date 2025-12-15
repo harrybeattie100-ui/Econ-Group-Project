@@ -133,8 +133,8 @@ def save_figures(
                 "FSI": df["FSI"],
             }
         )
-        # Focus on recent history and aggregate to weekly to reduce noise.
-        plot_df = contrib_df.loc[contrib_df.index >= "2020-01-01"].resample("W").mean().dropna()
+        # Focus on recent history and aggregate to monthly to reduce noise and thicken bars.
+        plot_df = contrib_df.loc[contrib_df.index >= "2020-01-01"].resample("M").mean().dropna()
 
         fig, ax = plt.subplots(figsize=(10, 5))
         colors = {
@@ -144,7 +144,7 @@ def save_figures(
         }
         ax.axhline(0, color="#777777", linewidth=1, linestyle="--")
 
-        width = 5  # days, for weekly bars
+        width = 20  # days, for monthly bars
         vix_vals = plot_df["VIX"]
         spread_vals = plot_df["Credit spread"]
         bank_vals = plot_df["Bank risk"]
