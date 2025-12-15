@@ -141,30 +141,36 @@ def save_figures(
             "VIX": "#4c78a8",
             "Credit spread": "#9c755f",
             "Bank risk": "#6b6ecf",
-            "FSI": "#1f2d3d",
         }
         ax.axhline(0, color="#777777", linewidth=1, linestyle="--")
-        ax.plot(plot_df.index, plot_df["VIX"], label="VIX", color=colors["VIX"], linewidth=1)
-        ax.plot(
+
+        width = 5  # days, for weekly bars
+        vix_vals = plot_df["VIX"]
+        spread_vals = plot_df["Credit spread"]
+        bank_vals = plot_df["Bank risk"]
+
+        ax.bar(plot_df.index, vix_vals, width=width, label="VIX", color=colors["VIX"])
+        ax.bar(
             plot_df.index,
-            plot_df["Credit spread"],
+            spread_vals,
+            width=width,
+            bottom=vix_vals,
             label="Credit spread",
             color=colors["Credit spread"],
-            linewidth=1,
         )
-        ax.plot(
+        ax.bar(
             plot_df.index,
-            plot_df["Bank risk"],
+            bank_vals,
+            width=width,
+            bottom=vix_vals + spread_vals,
             label="Bank risk",
             color=colors["Bank risk"],
-            linewidth=1,
         )
-        ax.plot(plot_df.index, plot_df["FSI"], label="FSI", color=colors["FSI"], linewidth=2.3)
 
         ax.set_title("FSI component contributions")
         ax.set_ylabel("Contribution to FSI")
         ax.tick_params(labelsize=9)
-        legend = ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=4, fontsize=9)
+        legend = ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=3, fontsize=9)
         legend.set_frame_on(False)
         fig.tight_layout()
         fig.savefig(REPORT_DIR / "fsi_decomposition.png", dpi=300, bbox_inches="tight")
