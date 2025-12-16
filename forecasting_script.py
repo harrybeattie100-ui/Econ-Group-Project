@@ -168,6 +168,16 @@ def save_figures(
             color=colors["Bank risk"],
         )
 
+        y_min = min(vix_vals.min(), spread_vals.min(), bank_vals.min(), (vix_vals + spread_vals + bank_vals).min(), 0)
+        y_max = max(vix_vals.max(), spread_vals.max(), bank_vals.max(), (vix_vals + spread_vals + bank_vals).max(), 0)
+        pad = 0.05 * (y_max - y_min) if y_max != y_min else 0.1
+        ax.set_ylim(y_min - pad, y_max + pad)
+
+        ax.set_xlim(
+            plot_df.index.min() - pd.Timedelta(days=width),
+            plot_df.index.max() + pd.Timedelta(days=width),
+        )
+
         ax.set_title("FSI component contributions")
         ax.set_ylabel("Contribution to FSI")
         ax.tick_params(labelsize=9)
