@@ -6,6 +6,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
 from statsmodels.tsa.stattools import adfuller
+from statsmodels.graphics.gofplots import qqplot
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 
 sys.path.append(os.path.abspath("."))
@@ -135,25 +136,18 @@ def save_figures(
     try:
         if arima_model is not None and hasattr(arima_model, "resid"):
             arima_resid = pd.Series(arima_model.resid, index=df.index).dropna()
-            fig, axes = plt.subplots(1, 3, figsize=(14, 4), constrained_layout=True)
+            fig, axes = plt.subplots(1, 2, figsize=(12, 4), constrained_layout=True)
 
-            # Residuals over time
-            axes[0].plot(arima_resid.index, arima_resid.values, color="#1f2d3d", linewidth=1)
+            # Residuals over time (use project blue)
+            axes[0].plot(arima_resid.index, arima_resid.values, color="#1f2d3d", linewidth=1.2)
             axes[0].axhline(0, color="#777777", linewidth=1, linestyle="--")
             axes[0].set_title("ARIMA residuals over time")
             axes[0].set_xlabel("Date")
             axes[0].set_ylabel("Residual")
 
-            # ACF of residuals
-            plot_acf(arima_resid, lags=24, ax=axes[1])
-            axes[1].set_title("Residual ACF")
-            axes[1].set_xlim(-0.5, 24.5)
-
-            # Histogram of residuals
-            axes[2].hist(arima_resid, bins=30, color="#4c78a8", alpha=0.8, density=True)
-            axes[2].axvline(0, color="#777777", linewidth=1, linestyle="--")
-            axes[2].set_title("Residual histogram")
-            axes[2].set_xlabel("Residual")
+            # Normal Q–Q plot
+            qqplot(arima_resid, line="s", ax=axes[1], color="#4c78a8", alpha=0.8)
+            axes[1].set_title("ARIMA residuals Q–Q plot")
 
             fig.savefig(REPORT_DIR / "arima_residual_diagnostics.png", dpi=300, bbox_inches="tight")
             plt.close(fig)
