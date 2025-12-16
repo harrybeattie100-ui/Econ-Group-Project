@@ -3,8 +3,8 @@
 Dep. Variable:                    FSI   R-squared:                       1.000
 Model:                            OLS   Adj. R-squared:                  1.000
 Method:                 Least Squares   F-statistic:                 2.645e+31
-Date:                Mon, 15 Dec 2025   Prob (F-statistic):               0.00
-Time:                        15:53:23   Log-Likelihood:             1.8297e+05
+Date:                Tue, 16 Dec 2025   Prob (F-statistic):               0.00
+Time:                        09:35:24   Log-Likelihood:             1.8297e+05
 No. Observations:                5777   AIC:                        -3.659e+05
 Df Residuals:                    5773   BIC:                        -3.659e+05
 Df Model:                           3                                         

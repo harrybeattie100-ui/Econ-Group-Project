@@ -133,8 +133,8 @@ def save_figures(
                 "FSI": df["FSI"],
             }
         )
-        # Focus on recent history and aggregate to monthly to reduce noise and thicken bars.
-        plot_df = contrib_df.loc[contrib_df.index >= "2020-01-01"].resample("M").mean().dropna()
+        # Use full history and aggregate to monthly to reduce noise and thicken bars.
+        plot_df = contrib_df.resample("M").mean().dropna()
 
         fig, ax = plt.subplots(figsize=(10, 5))
         colors = {
