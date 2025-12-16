@@ -1,0 +1,10 @@
+Augmented Dickey–Fuller test on FSI (level)
+Statistic: -4.9519
+P-value: 0.0000
+Lags used: 22
+Observations: 5754
+Critical values:
+  1%: -3.4315
+  5%: -2.8620
+  10%: -2.5670
+IC best: -12908.8069

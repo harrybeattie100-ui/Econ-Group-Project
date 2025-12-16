@@ -5,6 +5,7 @@ from pathlib import Path
 import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
+from statsmodels.tsa.stattools import adfuller
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 
 sys.path.append(os.path.abspath("."))
@@ -179,6 +180,27 @@ def save_figures(
         print(f"FSI decomposition figure failed: {exc}")
 
 
+def run_adf(series: pd.Series) -> dict:
+    """Run Augmented Dickey–Fuller test and return stats."""
+    result = adfuller(series.dropna(), autolag="AIC")
+    stat, pvalue, lags, nobs, critical, icbest = (
+        result[0],
+        result[1],
+        result[2],
+        result[3],
+        result[4],
+        result[5],
+    )
+    return {
+        "statistic": stat,
+        "pvalue": pvalue,
+        "lags_used": lags,
+        "nobs": nobs,
+        "critical_values": critical,
+        "icbest": icbest,
+    }
+
+
 def main() -> None:
     if not DATA_PATH.exists():
         raise FileNotFoundError("data/fsi.csv not found. Generate it with load_all_data first.")
@@ -205,9 +227,23 @@ def main() -> None:
     except Exception as exc:  # pragma: no cover - defensive
         print(f"OLS estimation failed: {exc}")
 
-    # ARIMA
+    # ADF + ARIMA
     arima_forecast_path = REPORT_DIR / "arima_forecast.csv"
+    adf_path = REPORT_DIR / "adf_test.txt"
     try:
+        adf_res = run_adf(df["FSI"])
+        with open(adf_path, "w") as fh:
+            fh.write("Augmented Dickey–Fuller test on FSI (level)\n")
+            fh.write(f"Statistic: {adf_res['statistic']:.4f}\n")
+            fh.write(f"P-value: {adf_res['pvalue']:.4f}\n")
+            fh.write(f"Lags used: {adf_res['lags_used']}\n")
+            fh.write(f"Observations: {adf_res['nobs']}\n")
+            fh.write("Critical values:\n")
+            for k, v in adf_res["critical_values"].items():
+                fh.write(f"  {k}: {v:.4f}\n")
+            fh.write(f"IC best: {adf_res['icbest']:.4f}\n")
+        print(f"ADF test saved to {adf_path}")
+
         order = select_arima(df["FSI"])
         arima_res = run_arima(df["FSI"], order)
         arima_forecast = arima_res["forecast"](FORECAST_HORIZON)
