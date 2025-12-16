@@ -44,6 +44,7 @@ def save_figures(
     arima_forecast: pd.DataFrame | None,
     garch_forecast: pd.DataFrame | None,
     garch_model,
+    arima_model=None,
     residuals: pd.Series | None = None,
 ) -> None:
     """Persist basic figures supporting the project report."""
@@ -130,6 +131,34 @@ def save_figures(
             plt.close(fig)
     except Exception as exc:  # pragma: no cover - defensive
         print(f"OLS residual ACF/PACF figure failed: {exc}")
+
+    try:
+        if arima_model is not None and hasattr(arima_model, "resid"):
+            arima_resid = pd.Series(arima_model.resid, index=df.index).dropna()
+            fig, axes = plt.subplots(1, 3, figsize=(14, 4), constrained_layout=True)
+
+            # Residuals over time
+            axes[0].plot(arima_resid.index, arima_resid.values, color="#1f2d3d", linewidth=1)
+            axes[0].axhline(0, color="#777777", linewidth=1, linestyle="--")
+            axes[0].set_title("ARIMA residuals over time")
+            axes[0].set_xlabel("Date")
+            axes[0].set_ylabel("Residual")
+
+            # ACF of residuals
+            plot_acf(arima_resid, lags=24, ax=axes[1])
+            axes[1].set_title("Residual ACF")
+            axes[1].set_xlim(-0.5, 24.5)
+
+            # Histogram of residuals
+            axes[2].hist(arima_resid, bins=30, color="#4c78a8", alpha=0.8, density=True)
+            axes[2].axvline(0, color="#777777", linewidth=1, linestyle="--")
+            axes[2].set_title("Residual histogram")
+            axes[2].set_xlabel("Residual")
+
+            fig.savefig(REPORT_DIR / "arima_residual_diagnostics.png", dpi=300, bbox_inches="tight")
+            plt.close(fig)
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"ARIMA residual diagnostics figure failed: {exc}")
 
     try:
         # Decompose the FSI into equal-weighted z-score contributions for the three components.
@@ -227,6 +256,7 @@ def main() -> None:
     df = pd.read_csv(DATA_PATH, parse_dates=["Date"], index_col="Date").dropna()
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     arima_forecast: pd.DataFrame | None = None
+    arima_model = None
     garch_forecast: pd.DataFrame | None = None
     garch_model = None
     ols_residuals: pd.Series | None = None
@@ -265,6 +295,7 @@ def main() -> None:
 
         order = select_arima(df["FSI"])
         arima_res = run_arima(df["FSI"], order)
+        arima_model = arima_res["model"]
         arima_forecast = arima_res["forecast"](FORECAST_HORIZON)
         arima_forecast.to_csv(arima_forecast_path, index_label="Date")
         print(f"ARIMA order {order} forecast saved to {arima_forecast_path}")
@@ -301,7 +332,14 @@ def main() -> None:
     except Exception as exc:  # pragma: no cover - defensive
         print(f"GARCH estimation failed: {exc}")
 
-    save_figures(df, arima_forecast, garch_forecast, garch_model, residuals=ols_residuals)
+    save_figures(
+        df,
+        arima_forecast,
+        garch_forecast,
+        garch_model,
+        arima_model=arima_model,
+        residuals=ols_residuals,
+    )
 
 
 if __name__ == "__main__":
