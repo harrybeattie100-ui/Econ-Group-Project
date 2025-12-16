@@ -136,21 +136,23 @@ def save_figures(
     try:
         if arima_model is not None and hasattr(arima_model, "resid"):
             arima_resid = pd.Series(arima_model.resid, index=df.index).dropna()
-            fig, axes = plt.subplots(1, 2, figsize=(12, 4), constrained_layout=True)
 
-            # Residuals over time (use project blue)
-            axes[0].plot(arima_resid.index, arima_resid.values, color="#1f2d3d", linewidth=1.2)
-            axes[0].axhline(0, color="#777777", linewidth=1, linestyle="--")
-            axes[0].set_title("ARIMA residuals over time")
-            axes[0].set_xlabel("Date")
-            axes[0].set_ylabel("Residual")
+            # Residuals over time (separate figure)
+            fig_ts, ax_ts = plt.subplots(figsize=(10, 3.8), constrained_layout=True)
+            ax_ts.plot(arima_resid.index, arima_resid.values, color="#1f2d3d", linewidth=1.2)
+            ax_ts.axhline(0, color="#777777", linewidth=1, linestyle="--")
+            ax_ts.set_title("ARIMA residuals over time")
+            ax_ts.set_xlabel("Date")
+            ax_ts.set_ylabel("Residual")
+            fig_ts.savefig(REPORT_DIR / "arima_residuals_time.png", dpi=300, bbox_inches="tight")
+            plt.close(fig_ts)
 
-            # Normal Q–Q plot
-            qqplot(arima_resid, line="s", ax=axes[1], color="#4c78a8", alpha=0.8)
-            axes[1].set_title("ARIMA residuals Q–Q plot")
-
-            fig.savefig(REPORT_DIR / "arima_residual_diagnostics.png", dpi=300, bbox_inches="tight")
-            plt.close(fig)
+            # Normal Q–Q plot (separate figure)
+            fig_qq, ax_qq = plt.subplots(figsize=(5.5, 4.5), constrained_layout=True)
+            qqplot(arima_resid, line="s", ax=ax_qq, color="#4c78a8", alpha=0.8)
+            ax_qq.set_title("ARIMA residuals Q–Q plot")
+            fig_qq.savefig(REPORT_DIR / "arima_residuals_qq.png", dpi=300, bbox_inches="tight")
+            plt.close(fig_qq)
     except Exception as exc:  # pragma: no cover - defensive
         print(f"ARIMA residual diagnostics figure failed: {exc}")
 
