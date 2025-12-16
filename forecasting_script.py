@@ -112,13 +112,21 @@ def save_figures(
     try:
         if residuals is not None and not residuals.empty:
             clean_resid = residuals.dropna()
-            fig, axes = plt.subplots(1, 2, figsize=(9, 4))
+            fig, axes = plt.subplots(1, 2, figsize=(12, 4), constrained_layout=True)
             plot_acf(clean_resid, lags=24, ax=axes[0])
             axes[0].set_title("OLS residual ACF")
+            axes[0].set_xlim(-0.5, 24.5)
             plot_pacf(clean_resid, lags=24, ax=axes[1], method="ywm")
             axes[1].set_title("OLS residual PACF")
-            fig.tight_layout()
-            fig.savefig(REPORT_DIR / "ols_residual_acf_pacf.png")
+            axes[1].set_xlim(-0.5, 24.5)
+            # Ensure symmetric padding so spikes are fully visible.
+            y_min = min(ax.get_ylim()[0] for ax in axes)
+            y_max = max(ax.get_ylim()[1] for ax in axes)
+            span = y_max - y_min if y_max != y_min else 1
+            pad = 0.1 * span
+            for ax in axes:
+                ax.set_ylim(y_min - pad, y_max + pad)
+            fig.savefig(REPORT_DIR / "ols_residual_acf_pacf.png", dpi=300, bbox_inches="tight")
             plt.close(fig)
     except Exception as exc:  # pragma: no cover - defensive
         print(f"OLS residual ACF/PACF figure failed: {exc}")
