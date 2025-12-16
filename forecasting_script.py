@@ -148,7 +148,7 @@ def save_figures(
             plt.close(fig_ts)
 
             # Normal Q–Q plot (separate figure)
-            fig_qq, ax_qq = plt.subplots(figsize=(6, 3.5), constrained_layout=True)
+            fig_qq, ax_qq = plt.subplots(figsize=(10, 3.8), constrained_layout=True)
             qqplot(arima_resid, line="s", ax=ax_qq, color="#4c78a8", alpha=0.8)
             ax_qq.set_title("ARIMA residuals Q–Q plot")
             fig_qq.savefig(REPORT_DIR / "arima_residuals_qq.png", dpi=300, bbox_inches="tight")
