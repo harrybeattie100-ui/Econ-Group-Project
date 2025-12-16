@@ -170,7 +170,8 @@ def save_figures(
 
         y_min = min(vix_vals.min(), spread_vals.min(), bank_vals.min(), (vix_vals + spread_vals + bank_vals).min(), 0)
         y_max = max(vix_vals.max(), spread_vals.max(), bank_vals.max(), (vix_vals + spread_vals + bank_vals).max(), 0)
-        pad = 0.05 * (y_max - y_min) if y_max != y_min else 0.1
+        span = y_max - y_min if y_max != y_min else 1
+        pad = 0.15 * span
         ax.set_ylim(y_min - pad, y_max + pad)
 
         ax.set_xlim(
