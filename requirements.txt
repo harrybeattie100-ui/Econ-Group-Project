@@ -4,7 +4,6 @@ statsmodels
 arch
 pmdarima
 streamlit
-altair
 yfinance
 matplotlib
 plotly
