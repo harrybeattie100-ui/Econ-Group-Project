@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Dict
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -151,19 +152,88 @@ def main() -> None:
         if not models_ready or results is None:
             st.info("Run models from the sidebar to view forecasts and diagnostics.")
         else:
-            history = train_df["FSI"].iloc[-200:]
+            history = train_df["FSI"].iloc[-200:].rename("Historical FSI")
             arima_forecast = results["arima"]["forecast"]
-            forecast_mean = arima_forecast["mean"]
-            combined = pd.concat([history, forecast_mean.rename("forecast")])
-            st.line_chart(combined)
+            forecast_mean = arima_forecast["mean"].rename("ARIMA forecast")
 
-            ci_df = arima_forecast[["mean_ci_lower", "mean_ci_upper"]]
-            ci_df.columns = ["lower", "upper"]
-            st.area_chart(ci_df)
+            # Ensure forecast index is a date index for plotting.
+            if not isinstance(forecast_mean.index, pd.DatetimeIndex):
+                future_index = pd.date_range(
+                    train_df.index.max() + pd.Timedelta(days=1),
+                    periods=len(forecast_mean),
+                    freq="D",
+                )
+                forecast_mean.index = future_index
+                arima_forecast.index = future_index
+
+            forecast_start = forecast_mean.index.min()
+            history_df = history.reset_index()
+            history_df.columns = ["Date", "value"]
+            history_df["series"] = "Historical FSI"
+            forecast_df_plot = forecast_mean.reset_index()
+            forecast_df_plot.columns = ["Date", "value"]
+            forecast_df_plot["series"] = "ARIMA forecast"
+            plot_df = pd.concat([history_df, forecast_df_plot], ignore_index=True)
+
+            line_chart = (
+                alt.Chart(plot_df)
+                .mark_line()
+                .encode(
+                    x=alt.X("Date:T", title="Date"),
+                    y=alt.Y("value:Q", title="FSI level"),
+                    color=alt.Color("series:N", title="Series"),
+                    tooltip=["Date:T", "series:N", alt.Tooltip("value:Q", format=".3f")],
+                )
+                .properties(title="Historical FSI and ARIMA forecast")
+            )
+            forecast_rule = alt.Chart(
+                pd.DataFrame({"Date": [forecast_start], "label": ["Forecast start"]})
+            ).mark_rule(strokeDash=[6, 4]).encode(
+                x="Date:T", tooltip=["label:N"]
+            )
+            st.altair_chart(line_chart + forecast_rule, use_container_width=True)
+
+            ci_df = arima_forecast[["mean", "mean_ci_lower", "mean_ci_upper"]].reset_index()
+            ci_df = ci_df.rename(columns={ci_df.columns[0]: "Date"})
+            ci_chart = (
+                alt.Chart(ci_df)
+                .mark_area(opacity=0.2, color="#9ecae1")
+                .encode(
+                    x=alt.X("Date:T", title="Date"),
+                    y=alt.Y("mean_ci_lower:Q", title="FSI level"),
+                    y2="mean_ci_upper:Q",
+                    tooltip=["Date:T", alt.Tooltip("mean_ci_lower:Q", format=".3f"), alt.Tooltip("mean_ci_upper:Q", format=".3f")],
+                )
+            )
+            mean_line = (
+                alt.Chart(ci_df)
+                .mark_line(color="#1f77b4")
+                .encode(x="Date:T", y="mean:Q", tooltip=["Date:T", alt.Tooltip("mean:Q", format=".3f")])
+            )
+            st.altair_chart(
+                (ci_chart + mean_line).properties(title="ARIMA forecast with 95% confidence band"),
+                use_container_width=True,
+            )
+            st.caption(
+                "Solid line = forecast mean; shaded area = 95% confidence interval from statsmodels; dashed line marks where the forecast begins."
+            )
 
             garch_forecast = results["garch"]["forecast"]
             garch_forecast.index.name = "step"
-            st.line_chart(garch_forecast)
+            garch_df = garch_forecast.reset_index()
+            garch_df = garch_df.rename(columns={garch_df.columns[0]: "Step", garch_df.columns[1]: "Volatility"})
+            garch_chart = (
+                alt.Chart(garch_df)
+                .mark_line(color="#e6550d")
+                .encode(
+                    x=alt.X("Step:Q", title="Forecast step (days ahead)"),
+                    y=alt.Y("Volatility:Q", title="Forecast volatility"),
+                    tooltip=["Step:Q", alt.Tooltip("Volatility:Q", format=".4f")],
+                )
+                .properties(title="GARCH conditional variance forecast")
+            )
+            st.altair_chart(garch_chart, use_container_width=True)
+            st.caption("Higher volatility implies more uncertainty in daily FSI movements; values are forecast standard deviations per day.")
 
     with eval_tab:
         st.subheader("Forecast evaluation")
