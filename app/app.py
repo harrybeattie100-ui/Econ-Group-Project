@@ -173,13 +173,20 @@ def main() -> None:
         )
         train_ratio = st.slider("Training ratio", min_value=0.6, max_value=0.9, value=0.8, step=0.05)
         max_test_points = 365  # cap to keep evaluation responsive
-        if st.button("Run evaluation"):
+        if st.button("Run evaluation", key="run_eval"):
             try:
                 eval_df = get_data()
                 fsi_series = eval_df["FSI"]
                 test_fraction = 1 - train_ratio
                 requested_test_points = max(int(len(fsi_series) * test_fraction), 1)
                 test_points = min(requested_test_points, max_test_points)
+                order_hint = (1, 0, 0)  # fast default to avoid slow auto_arima during evaluation
+
+                status = st.empty()
+                status.info(
+                    f"Running rolling evaluation on {test_points} days "
+                    f"(train ratio {train_ratio:.2f}, ARIMA order {order_hint})."
+                )
                 if requested_test_points > max_test_points:
                     st.info(
                         f"Requested test window ({requested_test_points} days) capped at {max_test_points} "
@@ -187,11 +194,12 @@ def main() -> None:
                     )
                 with st.spinner("Running rolling evaluation (ARIMA)…"):
                     eval_res = rolling_origin_arima_evaluation(
-                        fsi_series, order=None, test_size=test_points, forecast_horizon=1
+                        fsi_series, order=order_hint, test_size=test_points, forecast_horizon=1
                     )
                 metrics = eval_res["metrics"]
                 preds = eval_res["predictions"]
                 actual = fsi_series.loc[preds.index]
+                status.success("Evaluation complete.")
                 actual_aligned, preds_aligned = actual.align(preds, join="inner")
                 if actual_aligned.empty:
                     st.warning("No overlapping dates between actual and predicted series.")
