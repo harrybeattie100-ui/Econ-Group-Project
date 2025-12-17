@@ -172,14 +172,23 @@ def main() -> None:
             "Choose a training ratio and run the evaluation to see forecast accuracy on the held-out window."
         )
         train_ratio = st.slider("Training ratio", min_value=0.6, max_value=0.9, value=0.8, step=0.05)
+        max_test_points = 365  # cap to keep evaluation responsive
         if st.button("Run evaluation"):
             try:
                 eval_df = get_data()
                 fsi_series = eval_df["FSI"]
                 test_fraction = 1 - train_ratio
-                eval_res = rolling_origin_arima_evaluation(
-                    fsi_series, order=None, test_size=test_fraction, forecast_horizon=1
-                )
+                requested_test_points = max(int(len(fsi_series) * test_fraction), 1)
+                test_points = min(requested_test_points, max_test_points)
+                if requested_test_points > max_test_points:
+                    st.info(
+                        f"Requested test window ({requested_test_points} days) capped at {max_test_points} "
+                        "to keep the evaluation quick."
+                    )
+                with st.spinner("Running rolling evaluation (ARIMA)…"):
+                    eval_res = rolling_origin_arima_evaluation(
+                        fsi_series, order=None, test_size=test_points, forecast_horizon=1
+                    )
                 metrics = eval_res["metrics"]
                 preds = eval_res["predictions"]
                 actual = fsi_series.loc[preds.index]
