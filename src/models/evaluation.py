@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
+from statsmodels.tools.sm_exceptions import ConvergenceWarning
 
 from .arima import run_arima, select_arima
 
@@ -63,7 +66,8 @@ def rolling_origin_arima_evaluation(
     """
     Perform rolling-origin evaluation with one-step-ahead ARIMA forecasts.
 
-    The ARIMA order can be supplied; otherwise, it is reselected on each iteration.
+    The ARIMA order can be supplied; otherwise, it is selected once on the initial
+    training window to avoid repeatedly running auto_arima inside the loop.
     """
     if forecast_horizon <= 0:
         raise ValueError("forecast_horizon must be positive.")
@@ -72,12 +76,18 @@ def rolling_origin_arima_evaluation(
     train, test = time_series_train_test_split(series, test_size=test_size)
     preds: list[float] = []
 
-    for i in range(len(test)):
-        history = pd.concat([train, test.iloc[:i]])
-        eval_order = order if order is not None else select_arima(history)
-        arima_res = run_arima(history, eval_order)
-        forecast_df = arima_res["forecast"](steps=forecast_horizon)
-        preds.append(_extract_mean_forecast(forecast_df, offset=forecast_horizon - 1))
+    base_order = order if order is not None else select_arima(train)
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning)
+        warnings.filterwarnings("ignore", category=ConvergenceWarning)
+        current_res = run_arima(train, base_order)["model"]
+
+        for idx, value in test.items():
+            forecast_df = current_res.get_forecast(steps=forecast_horizon).summary_frame()
+            preds.append(_extract_mean_forecast(forecast_df, offset=forecast_horizon - 1))
+            new_obs = pd.Series([value], index=[idx], name=train.name)
+            current_res = current_res.append(new_obs, refit=False)
 
     predictions = pd.Series(preds, index=test.index, name="Forecast")
     metrics = {
