@@ -9,6 +9,7 @@ This repository contains the group project for FIN41660 Financial Econometrics a
   - High yield credit spread (FRED series)
   - Bank risk proxy (liquid financial ETF prices)
 - The data pipeline assembles these series, aligns them on a daily frequency, z-scores the components, and averages them to form the FSI. Cleaned CSVs are stored under `data/`.
+- The loader now reuses cached CSVs in `data/` by default to keep the app working offline/without re-downloading. Pass `refresh=True` to `load_all_data` to force a fresh pull.
 
 ## Repository structure
 - `src/utils/`: Data loaders and FSI construction (`load_all_data`).

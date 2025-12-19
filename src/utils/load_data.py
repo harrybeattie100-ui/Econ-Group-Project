@@ -43,6 +43,31 @@ def _write_csv(path: Path, data: pd.Series | pd.DataFrame) -> None:
     data.to_csv(path, index_label="Date")
 
 
+def _load_cached_fsi(path: Path | None = None) -> pd.DataFrame | None:
+    """
+    Load a previously saved FSI CSV if available.
+
+    Returns None when the file is missing or malformed so callers can fall back to downloads.
+    """
+    csv_path = path or DATA_DIR / "fsi.csv"
+    if not csv_path.exists():
+        return None
+
+    try:
+        df = pd.read_csv(csv_path, parse_dates=["Date"], index_col="Date")
+    except Exception:
+        return None
+
+    expected_cols = {"VIX", "Spread", "CDS", "FSI"}
+    if df.empty or not expected_cols.issubset(set(df.columns)):
+        return None
+
+    df = df.sort_index()
+    for col in expected_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df.dropna(how="all")
+
+
 def load_vix(start: str = DEFAULT_START, end: str | None = None) -> pd.Series:
     """Download daily VIX data and return a Series named 'VIX' indexed by date."""
     data = yf.download("^VIX", start=start, end=end, progress=False, auto_adjust=False)
@@ -128,8 +153,24 @@ def build_fsi(start: str = DEFAULT_START, end: str | None = None) -> pd.DataFram
     return aligned
 
 
-def load_all_data(start: str = DEFAULT_START, end: str | None = None, save_csv: bool = True) -> pd.DataFrame:
-    """Return the FSI DataFrame and optionally write CSV outputs under data/."""
+def load_all_data(
+    start: str = DEFAULT_START,
+    end: str | None = None,
+    save_csv: bool = True,
+    prefer_cached: bool = True,
+    refresh: bool = False,
+) -> pd.DataFrame:
+    """
+    Return the FSI DataFrame and optionally write CSV outputs under data/.
+
+    When prefer_cached=True (default) and a cached CSV exists, use it to avoid network calls.
+    Set refresh=True to force rebuilding from downloads even if cached data are present.
+    """
+    if prefer_cached and not refresh:
+        cached = _load_cached_fsi()
+        if cached is not None:
+            return cached
+
     fsi = build_fsi(start=start, end=end)
     if save_csv:
         _write_csv(DATA_DIR / "vix.csv", fsi[["VIX"]])

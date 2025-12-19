@@ -15,8 +15,8 @@ from src.utils.load_data import load_all_data
 
 @st.cache_data(show_spinner=False)
 def get_data() -> pd.DataFrame:
-    """Load and cache the FSI dataset."""
-    return load_all_data()
+    """Load and cache the FSI dataset (prefer cached CSVs to avoid network flakes)."""
+    return load_all_data(prefer_cached=True)
 
 
 def run_model_suite(df: pd.DataFrame, horizon: int) -> Dict[str, object]:
